@@ -2,10 +2,10 @@
 package main
 
 import (
+	"deadbeef"
 	"fmt"
 	"github.com/mitchellh/go-linereader"
 	"os"
-	"deadbeef"
 	"strconv"
 )
 

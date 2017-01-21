@@ -9,6 +9,29 @@ var (
 	chanCount int = 10
 )
 
+func TestReflector(t *testing.T) {
+	outbound := make(chan string)
+	inbound := Reflector(outbound)
+	outbound <- "a"
+
+	if in := <-inbound; in != "a a" {
+		t.Errorf("Unexpected output %s", in)
+	}
+
+	outbound <- "b"
+	close(outbound)
+	cases := 0
+	for perm := range inbound {
+		if perm != "a b" && perm != "b a" && perm != "b b" {
+			t.Errorf("Unexpected output %s", perm)
+		}
+		cases++
+	}
+	if cases != 3 {
+		t.Errorf("There should be 3 perms, not %d", cases)
+	}
+}
+
 func TestCombiner(t *testing.T) {
 	left, right := make(chan string), make(chan string)
 	out := Combiner(left, right)
@@ -16,10 +39,10 @@ func TestCombiner(t *testing.T) {
 	right <- "bb"
 	close(left)
 	close(right)
-	
+
 	cases := 0
 	for perm := range out {
-		if perm != "a bb" && perm != "bb a"{
+		if perm != "a bb" && perm != "bb a" {
 			t.Errorf("Unexpected output %s", perm)
 		}
 		cases++
@@ -55,60 +78,28 @@ func TestRepeater(t *testing.T) {
 
 func TestSplitter(t *testing.T) {
 	outbound := make(chan string)
-	inboundMap := Splitter(outbound, 2)
-	if len(inboundMap[1]) != 2 {
-		t.Errorf("Center length does not have two channels")
-	}
+	inbounds := Splitter(outbound, chanCount)
 
-	outbound <- ""
-	if in, ok := <-inboundMap[0][0]; ok {
-		if in != "" {
-			t.Errorf("Zero length channel should have received an empty string")
+	for i := 0; i < chanCount; i++ {
+		output := ""
+		for j := 0; j < i; j++ {
+			output = output + "a"
 		}
-	}
-	select {
-	case in := <-inboundMap[1][0]:
-		t.Errorf("One length channel should not have received %s", in)
-	case in := <-inboundMap[2][0]:
-		t.Errorf("Two length channel should not have received %s", in)
-	default:
-	}
-
-	outbound <- "a"
-	for i, ch := range inboundMap[1] {
-		if in, ok := <-ch; ok {
-			if in != "a" {
-				t.Errorf("one length channel[%d] should not have received an %s", i, in)
+		outbound <- output
+		if in, ok := <-inbounds[i]; ok {
+			if in != output {
+				t.Errorf("Channel[%d] should not have received an '%s'", i, in)
 			}
 		}
-	}
-	select {
-	case in := <-inboundMap[0][0]:
-		t.Errorf("Zero length channel should not have received %s", in)
-	case in := <-inboundMap[2][0]:
-		t.Errorf("Two length channel should not have received %s", in)
-	default:
-	}
-}
-
-func TestDuplicate(t *testing.T) {
-	input := make(chan string, 10)
-	input <- "test"
-	outputs := Duplicate(input, chanCount)
-	for i := 0; i < chanCount; i++ {
-		message, ok := <-outputs[i]
-		if !ok {
-			t.Errorf("output channel closed")
-		}
-		if message != "test" {
-			t.Errorf("message was not test")
-		}
-	}
-	close(input)
-	for i := 0; i < chanCount; i++ {
-		_, ok := <-outputs[i]
-		if ok {
-			t.Errorf("output channel was not closed after input was")
+		for j := 0; j < chanCount; j++ {
+			if j == i {
+				continue
+			}
+			select {
+			case in := <-inbounds[j]:
+				t.Errorf("Channel[%d] should not have received an '%s'", j, in)
+			default:
+			}
 		}
 	}
 }
@@ -137,7 +128,7 @@ func TestGraph(t *testing.T) {
 	outbound <- "a"
 	outbound <- "bb"
 	close(outbound)
-	if in := <- inbound; in != "bb a" && in != "a bb" {
+	if in := <-inbound; in != "bb a" && in != "a bb" {
 		t.Errorf("Unexpected message %s", in)
 	}
 }
